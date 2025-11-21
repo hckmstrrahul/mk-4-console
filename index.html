@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMNI-DATA CONSOLE MK-IV</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide is used for icons, ensures they load -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-color: #f0f0f0;
+            --fg-color: #111111;
+            --accent-color: #ff3300;
+            --grid-color: #e0e0e0;
+            --grid-gap: 4px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            transition: background-color 0.5s ease, color 0.5s ease;
+            margin: 0;
+            padding: 0;
+            height: 100vh; /* Ensure full viewport height */
+            width: 100vw;  /* Ensure full viewport width */
+        }
+
+        /* Custom Grid Logic */
+        #viz-grid {
+            display: grid;
+            /* Adaptive columns based on a minimum cell width */
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            /* Ensure rows are flexible to fill height */
+            grid-auto-rows: minmax(100px, 1fr); 
+            grid-auto-flow: dense;
+            gap: var(--grid-gap);
+            padding: var(--grid-gap);
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .viz-container {
+            position: relative;
+            background: var(--bg-color);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--grid-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: background 0.5s, border-color 0.5s;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Overlay - Floating Control Module (CENTERED AND SMALLER) */
+        #ui-layer {
+            position: fixed;
+            bottom: 20px;
+            left: 50%; /* Center alignment */
+            transform: translateX(-50%); /* Center alignment */
+            z-index: 50;
+        }
+
+        #control-module {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 9999px; /* Fully rounded capsule */
+            padding: 8px 18px; /* Reduced padding */
+            display: flex;
+            gap: 15px; /* Reduced gap */
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+            transition: background 0.3s;
+        }
+
+        .control-button-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px; /* Reduced gap */
+        }
+
+        .te-button {
+            width: 50px; /* Reduced size */
+            height: 50px; /* Reduced size */
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .te-button:active {
+            transform: scale(0.92);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .te-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px; /* Reduced label size */
+            font-weight: 700;
+            color: #ccc;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Custom labels for dynamic values */
+        #speed-label, #mode-label {
+            font-size: 10px;
+            /* Removed accent color enforcement to keep it consistent with others unless active */
+            color: #ccc; 
+        }
+
+
+        /* Specific Button Styles */
+        #btn-shuffle { background-color: #ff4d00; color: #fff; }
+        #btn-theme { background-color: #4285F4; color: #fff; }
+        #btn-source { background-color: #ffffff; color: #111; }
+        #btn-speed { background-color: #00AA44; color: #fff; } 
+        #btn-about { background-color: #666666; color: #fff; }
+        #btn-mode { background-color: #8b5cf6; color: #fff; } /* New Mode Button (Violet) */
+
+
+        /* Metadata overlays on viz */
+        .viz-meta {
+            position: absolute;
+            top: 6px;
+            left: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            text-transform: uppercase;
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Scanline effect */
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.02) 50%, rgba(0,0,0,0.02));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        /* MODAL STYLES */
+        #about-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        
+        #about-modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 24px;
+            padding: 30px;
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            transform: scale(0.9);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            color: #e0e0e0;
+        }
+
+        #about-modal.active .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-title {
+            font-family: 'Inter', sans-serif;
+            font-weight: 800;
+            font-size: 18px;
+            margin-bottom: 15px;
+            letter-spacing: -0.5px;
+        }
+
+        .modal-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #aaa;
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            border-top: 1px solid #333;
+            padding-top: 15px;
+            margin-top: 15px;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: #666;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .modal-link {
+            color: #fff;
+            text-decoration: none;
+            border-bottom: 1px dotted #666;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .modal-link:hover {
+            color: #ff3300;
+            border-color: #ff3300;
+        }
+
+        .close-modal {
+            margin-top: 20px;
+            background: transparent;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 99px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .close-modal:hover {
+            background: #333;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="viz-grid"></div>
+    <div class="scanlines"></div>
+
+    <!-- ABOUT MODAL -->
+    <div id="about-modal" onclick="system.closeModal(event)">
+        <div class="modal-content">
+            <div class="modal-title">OMNI-DATA CONSOLE MK-IV</div>
+            <div class="modal-text">
+                A procedural retro-futuristic data visualization engine blending industrial aesthetics with high-precision metrics. Generates infinite, unique bento-grid layouts for immersive data storytelling in real-time.
+            </div>
+            <div class="modal-footer">
+                <div>Built with Gemini 3</div>
+                <div>Created by <a href="https://x.com/hckmstrrahul" target="_blank" class="modal-link">@hckmstrrahul</a></div>
+                <div style="margin-top: 5px; opacity: 0.5;">20 Nov 2025</div>
+            </div>
+            <button class="close-modal" onclick="system.closeModal(event)">CLOSE</button>
+        </div>
+    </div>
+
+    <div id="ui-layer">
+        <div id="control-module">
+
+            <div class="control-button-group">
+                <button class="te-button" id="btn-shuffle" onclick="system.shuffleViz()">
+                    <i data-lucide="shuffle" class="w-5 h-5"></i>
+                </button>
+                <div class="te-label">SHUFFLE</div>
+            </div>
+
+            <div class="control-button-group">
+                <button class="te-button" id="btn-theme" onclick="system.cycleTheme()">
+                    <i data-lucide="palette" class="w-5 h-5"></i>
+                </button>
+                <div class="te-label">THEME</div>
+            </div>
+
+            <div class="control-button-group">
+                <button class="te-button" id="btn-source" onclick="system.cycleContext()">
+                    <i data-lucide="database" class="w-5 h-5"></i>
+                </button>
+                <div class="te-label">SOURCE</div>
+            </div>
+            
+            <div class="control-button-group">
+                <button class="te-button" id="btn-speed" onclick="system.cycleSpeed()">
+                    <i data-lucide="gauge" class="w-5 h-5"></i>
+                </button>
+                <div class="te-label" id="speed-label" style="color: var(--accent-color);">SLOW</div>
+            </div>
+
+            <!-- NEW MODE BUTTON -->
+            <div class="control-button-group">
+                <button class="te-button" id="btn-mode" onclick="system.toggleMode()">
+                    <i data-lucide="repeat" class="w-5 h-5"></i>
+                </button>
+                <div class="te-label" id="mode-label">MANUAL</div>
+            </div>
+
+            <div class="control-button-group">
+                <button class="te-button" id="btn-about" onclick="system.openModal()">
+                    <i data-lucide="info" class="w-5 h-5"></i>
+                </button>
+                <div class="te-label">ABOUT</div>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+/**
+ * OMNI-DATA VISUALIZER ENGINE
+ */
+
+// --- DIVERSE THEMES ---
+const THEMES = [
+    { name: 'ENGINEERING', bg: '#f0f0f0', fg: '#111111', accent: '#ff3300', grid: '#e0e0e0' },
+    { name: 'BLUEPRINT', bg: '#0033cc', fg: '#ffffff', accent: '#ffff00', grid: '#0044ee' },
+    { name: 'TERMINAL', bg: '#0a0a0a', fg: '#00ff41', accent: '#008f11', grid: '#112211' },
+    { name: 'MIDNIGHT', bg: '#111111', fg: '#eeeeee', accent: '#666666', grid: '#222222' },
+    { name: 'PAPER', bg: '#fdfbf7', fg: '#2d2d2d', accent: '#d9534f', grid: '#e8e6e1' },
+    { name: 'BRAUN', bg: '#222222', fg: '#e0e0e0', accent: '#f4b400', grid: '#333333' },
+    { name: 'VAPORWAVE', bg: '#190a36', fg: '#00ffff', accent: '#ff69b4', grid: '#331a66' },
+    { name: 'FOREST', bg: '#1c3020', fg: '#c4d7b2', accent: '#a54a2a', grid: '#2e4f3a' }, 
+    { name: 'MONOCHROME', bg: '#292929', fg: '#ffffff', accent: '#888888', grid: '#4a4a4a' }, 
+    { name: 'SOLARIS', bg: '#002b36', fg: '#fdf6e3', accent: '#dc322f', grid: '#073642' },
+    { name: 'NEON GRID', bg: '#08081a', fg: '#e0e0ff', accent: '#ccff00', grid: '#333355' },
+    { name: 'ACID PROTOCOL', bg: '#111111', fg: '#39ff14', accent: '#ff00ff', grid: '#333333' },
+    { name: 'BIOS ERROR', bg: '#000084', fg: '#ffffff', accent: '#ffff00', grid: '#0000aa' },
+    { name: 'HAZARD ZONE', bg: '#f2c500', fg: '#000000', accent: '#ff0000', grid: '#d9b000' },
+    { name: 'VIRTUAL RED', bg: '#1a0000', fg: '#ff0000', accent: '#aa0000', grid: '#4d0000' },
+    { name: 'CANDY POP', bg: '#ffecf2', fg: '#ff00cc', accent: '#00ccff', grid: '#ffdbe8' },
+    { name: 'ULTRAVIOLET', bg: '#0f001a', fg: '#bf00ff', accent: '#00ff00', grid: '#2a004d' }
+];
+
+// --- CONTEXTS (DATA TOPICS) ---
+const CONTEXTS = [
+    {
+        title: 'AEROSPACE TELEMETRY',
+        labels: ['ALTITUDE', 'PITCH', 'YAW', 'ROLL', 'THRUST', 'O2 LEVEL', 'G-FORCE', 'APOGEE', 'PERIGEE', 'BURN RATE', 'PSI', 'TEMP A', 'TEMP B', 'RADAR', 'VELOCITY', 'DRAG', 'LIFT', 'MACH', 'SAT LOCK'],
+        unit: 'UNITS'
+    },
+    {
+        title: 'SERVER INFRASTRUCTURE',
+        labels: ['CPU LOAD', 'MEM USAGE', 'I/O WAIT', 'NET IN', 'NET OUT', 'DISK A', 'DISK B', 'REQS/SEC', 'LATENCY', 'UPTIME', 'ERR RATE', 'CACHE', 'SWAP', 'THREADS', 'PIPES', 'SOCKETS', 'TEMP', 'FAN RPM'],
+        unit: '%'
+    },
+    {
+        title: 'MARKET ANALYTICS',
+        labels: ['NASDAQ', 'DOW', 'YIELD', 'VOLATILITY', 'ROI', 'MARGIN', 'VOLUME', 'ASK', 'BID', 'SPREAD', 'LIQUIDITY', 'BONDS', 'FUTURES', 'OPTIONS', 'FOREX', 'CRYPTO', 'INDEX', 'DELTA'],
+        unit: 'PTS'
+    },
+    {
+        title: 'BIO-METRICS',
+        labels: ['BPM', 'SPO2', 'SYS BP', 'DIA BP', 'TEMP', 'RESP RATE', 'GLUCOSE', 'LACTATE', 'REM', 'DEEP', 'STEPS', 'CALS', 'EKG', 'EEG', 'EMG', 'PH', 'H2O'],
+        unit: ''
+    }
+];
+
+// --- SPEED LEVELS ---
+const SPEED_LEVELS = [
+    { label: 'SLOW', value: 0.0025 },
+    { label: 'NORMAL', value: 0.005 },
+    { label: 'FAST', value: 0.015 }
+];
+
+
+// --- UTILS ---
+const rnd = (min, max) => Math.random() * (max - min) + min;
+const rndInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const rndArr = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// --- VIZ RENDERER BASE CLASS ---
+class VizModule {
+    constructor(canvas, ctx, width, height, theme, label, initialSpeed) {
+        this.canvas = canvas;
+        this.ctx = ctx;
+        this.width = width;
+        this.height = height;
+        this.theme = theme;
+        this.label = label;
+        this.time = Math.random() * 100;
+        this.data = Array.from({length: 50}, () => Math.random());
+        this.color = Math.random() > 0.8 ? theme.accent : theme.fg;
+        this.speed = initialSpeed;
+    }
+
+    resize(w, h) {
+        this.width = w;
+        this.height = h;
+    }
+    
+    setSpeed(newSpeed) {
+        this.speed = newSpeed;
+    }
+
+    update() {
+        this.time += this.speed; 
+        if(Math.random() > 0.9) this.data.shift();
+        if(Math.random() > 0.9) this.data.push(Math.random());
+    }
+
+    clear() {
+        this.ctx.fillStyle = this.theme.bg;
+        this.ctx.fillRect(0, 0, this.width, this.height);
+    }
+
+    drawGrid(rows = 3, cols = 3) {
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.globalAlpha = 0.1;
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        for(let i=1; i<rows; i++) {
+            const y = (this.height/rows) * i;
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.width, y);
+        }
+        for(let i=1; i<cols; i++) {
+            const x = (this.width/cols) * i;
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, 0);
+        }
+        this.ctx.stroke();
+        this.ctx.globalAlpha = 1.0;
+    }
+}
+
+// --- VISUALIZATION IMPLEMENTATIONS ---
+
+// 1. Sine Wave
+class VizSine extends VizModule {
+    draw() {
+        this.clear();
+        this.drawGrid(2, 4);
+        this.ctx.beginPath();
+        this.ctx.strokeStyle = this.color;
+        this.ctx.lineWidth = 2;
+        const factor = this.speed * 1000;
+        for (let x = 0; x < this.width; x++) {
+            const y = this.height / 2 + Math.sin(x * 0.05 + this.time * factor) * (this.height * 0.3) * Math.sin(this.time * factor * 0.1); 
+            x === 0 ? this.ctx.moveTo(x, y) : this.ctx.lineTo(x, y);
+        }
+        this.ctx.stroke();
+    }
+}
+
+// 2. Vertical Bar Histogram
+class VizBars extends VizModule {
+    draw() {
+        this.clear();
+        const barWidth = (this.width / 20);
+        this.ctx.fillStyle = this.theme.fg;
+        const factor = this.speed * 2000;
+        for (let i = 0; i < 20; i++) {
+            const h = Math.abs(Math.sin(i + this.time*factor)) * this.height * 0.8;
+            this.ctx.fillRect(i * barWidth, this.height - h, barWidth - 2, h);
+        }
+    }
+}
+
+// 3. Circular Gauge
+class VizGauge extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width / 2;
+        const cy = this.height / 2 + 10;
+        const r = Math.min(this.width, this.height) * 0.35;
+        const factor = this.speed * 1000;
+        const val = (Math.sin(this.time * factor) + 1) / 2;
+
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, r, Math.PI, 0);
+        this.ctx.lineWidth = 4;
+        this.ctx.strokeStyle = this.theme.fg + '33';
+        this.ctx.stroke();
+
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, r, Math.PI, Math.PI + (val * Math.PI));
+        this.ctx.strokeStyle = this.theme.accent;
+        this.ctx.stroke();
+        
+        this.ctx.fillStyle = this.theme.fg;
+        this.ctx.textAlign = "center";
+        this.ctx.font = "12px JetBrains Mono";
+        this.ctx.fillText(Math.floor(val * 100) + "%", cx, cy - 10);
+    }
+}
+
+// 4. Radar / Spider Chart
+class VizRadar extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width / 2;
+        const cy = this.height / 2;
+        const r = Math.min(this.width, this.height) * 0.35;
+        const sides = 5;
+        
+        this.ctx.strokeStyle = this.theme.fg + '33';
+        this.ctx.lineWidth = 1;
+        for(let ring=1; ring<=3; ring++) {
+            this.ctx.beginPath();
+            for(let i=0; i<=sides; i++) {
+                const angle = (i / sides) * Math.PI * 2 - Math.PI/2;
+                const rad = r * (ring/3);
+                const x = cx + Math.cos(angle) * rad;
+                const y = cy + Math.sin(angle) * rad;
+                i===0 ? this.ctx.moveTo(x, y) : this.ctx.lineTo(x, y);
+            }
+            this.ctx.stroke();
+        }
+
+        this.ctx.beginPath();
+        this.ctx.fillStyle = this.theme.accent + '44';
+        this.ctx.strokeStyle = this.theme.accent;
+        const factor = this.speed * 1000;
+        for(let i=0; i<=sides; i++) {
+            const angle = (i / sides) * Math.PI * 2 - Math.PI/2;
+            const noise = Math.abs(Math.sin(this.time * factor + i));
+            const rad = r * (0.4 + noise * 0.6);
+            const x = cx + Math.cos(angle) * rad;
+            const y = cy + Math.sin(angle) * rad;
+            i===0 ? this.ctx.moveTo(x, y) : this.ctx.lineTo(x, y);
+        }
+        this.ctx.fill();
+        this.ctx.stroke();
+    }
+}
+
+// 5. Rolling Line Chart
+class VizLine extends VizModule {
+    constructor(c, ctx, w, h, t, l, initialSpeed) {
+        super(c,ctx,w,h,t,l,initialSpeed);
+        this.points = [];
+    }
+    draw() {
+        this.clear();
+        this.drawGrid(4, 2);
+        if (this.points.length < this.width / 5) {
+            this.points.push(Math.random());
+        } else {
+            this.points.shift();
+            this.points.push(Math.random());
+        }
+
+        this.ctx.beginPath();
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.lineWidth = 1.5;
+        const factor = this.speed * 100;
+        this.points.forEach((p, i) => {
+            const smoothP = p * 0.2 + Math.sin(this.time * factor + i*0.1) * 0.2 + 0.5;
+            const x = i * 5;
+            const y = this.height - (smoothP * this.height * 0.8) - 10;
+            i === 0 ? this.ctx.moveTo(x, y) : this.ctx.lineTo(x, y);
+        });
+        this.ctx.stroke();
+    }
+}
+
+// 6. Dot Matrix / Heatmap
+class VizMatrix extends VizModule {
+    draw() {
+        this.clear();
+        const cols = 8;
+        const rows = 5;
+        const cw = this.width / cols;
+        const ch = this.height / rows;
+        const factor = this.speed * 1000;
+        
+        for(let x=0; x<cols; x++) {
+            for(let y=0; y<rows; y++) {
+                const val = Math.sin(x * 0.5 + y * 0.5 + this.time * factor);
+                this.ctx.fillStyle = val > 0.5 ? this.theme.accent : this.theme.fg + '22';
+                this.ctx.fillRect(x*cw + 2, y*ch + 2, cw-4, ch-4);
+            }
+        }
+    }
+}
+
+// 7. Rotating Wireframe Cube
+class VizCube extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width / 2;
+        const cy = this.height / 2;
+        const s = Math.min(this.width, this.height) * 0.25;
+        
+        const vertices = [
+            [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+            [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]
+        ];
+        
+        const edges = [
+            [0,1], [1,2], [2,3], [3,0], [4,5], [5,6], [6,7], [7,4], [0,4], [1,5], [2,6], [3,7]
+        ];
+
+        const t = this.time * this.speed * 4000; 
+        const rotate = (v) => {
+            let x = v[0], y = v[1], z = v[2];
+            let x2 = x * Math.cos(t) - z * Math.sin(t);
+            let z2 = x * Math.sin(t) + z * Math.cos(t);
+            let y2 = y * Math.cos(t*0.5) - z2 * Math.sin(t*0.5);
+            return [x2, y2];
+        }
+
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.beginPath();
+        edges.forEach(e => {
+            const p1 = rotate(vertices[e[0]]);
+            const p2 = rotate(vertices[e[1]]);
+            this.ctx.moveTo(cx + p1[0]*s, cy + p1[1]*s);
+            this.ctx.lineTo(cx + p2[0]*s, cy + p2[1]*s);
+        });
+        this.ctx.stroke();
+    }
+}
+
+// 8. Binary Stream
+class VizBinary extends VizModule {
+    draw() {
+        this.clear();
+        this.ctx.font = "10px JetBrains Mono";
+        this.ctx.fillStyle = this.theme.fg;
+        const cols = Math.floor(this.width / 12);
+        const rows = Math.floor(this.height / 12);
+        const flipRate = 0.99 - (this.speed * 10);
+        
+        for(let x=0; x<cols; x++) {
+            for(let y=0; y<rows; y++) {
+                if(Math.random() > flipRate) { 
+                     this.ctx.fillStyle = this.theme.accent;
+                     this.ctx.fillText(Math.random() > 0.5 ? "1" : "0", x*12, y*12+10);
+                     this.ctx.fillStyle = this.theme.fg;
+                } else {
+                     this.ctx.fillText(Math.random() > 0.5 ? "1" : "0", x*12, y*12+10);
+                }
+            }
+        }
+    }
+}
+
+// 9. Target Rings
+class VizTarget extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        
+        this.ctx.lineWidth = 1;
+        const factor = this.speed * 1000;
+        for(let i=1; i<6; i++) {
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, i * 10, 0, Math.PI * 2);
+            this.ctx.strokeStyle = (i % 2 === 0) ? this.theme.accent : this.theme.fg;
+            if (Math.floor(this.time * factor) % 6 === i) this.ctx.lineWidth = 3;
+            else this.ctx.lineWidth = 1;
+            this.ctx.stroke();
+        }
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.beginPath();
+        this.ctx.moveTo(cx - 30, cy); this.ctx.lineTo(cx + 30, cy);
+        this.ctx.moveTo(cx, cy - 30); this.ctx.lineTo(cx, cy + 30);
+        this.ctx.stroke();
+    }
+}
+
+// 10. Hex Data Dump (Replaces BigNum)
+class VizHexDump extends VizModule {
+    draw() {
+        this.clear();
+        const factor = this.speed * 1000;
+        const val = Math.floor(this.time * factor * 1000).toString(16).toUpperCase().slice(-4);
+        
+        this.ctx.fillStyle = this.theme.fg;
+        this.ctx.font = "bold 32px JetBrains Mono";
+        this.ctx.textAlign = "center";
+        this.ctx.fillText("0x" + val, this.width/2, this.height/2 + 10);
+        
+        this.ctx.font = "10px JetBrains Mono";
+        this.ctx.fillStyle = this.theme.accent;
+        this.ctx.fillText("MEM ADDR", this.width/2, this.height/2 + 25);
+    }
+}
+
+// 11. Scatter Plot
+class VizScatter extends VizModule {
+    constructor(c, ctx, w, h, t, l, initialSpeed) {
+        super(c,ctx,w,h,t,l,initialSpeed);
+        this.dots = Array.from({length:20}, () => ({x: Math.random(), y: Math.random()}));
+        this.dotSpeed = 0.002; 
+    }
+    draw() {
+        this.clear();
+        this.drawGrid(3,3);
+        const speedFactor = this.speed * 400; 
+        this.dots.forEach(d => {
+            d.x += (Math.random() - 0.5) * this.dotSpeed * speedFactor;
+            d.y += (Math.random() - 0.5) * this.dotSpeed * speedFactor;
+            if(d.x < 0) d.x = 1; if(d.x > 1) d.x = 0;
+            if(d.y < 0) d.y = 1; if(d.y > 1) d.y = 0;
+            
+            this.ctx.beginPath();
+            this.ctx.arc(d.x * this.width, d.y * this.height, 2, 0, Math.PI*2);
+            this.ctx.fillStyle = this.theme.accent;
+            this.ctx.fill();
+        });
+    }
+}
+
+// 12. Horizon
+class VizHorizon extends VizModule {
+    draw() {
+        this.clear();
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, this.height);
+        const factor = this.speed * 2000;
+        for(let x=0; x<=this.width; x+=5) {
+            const y = this.height/2 + (Math.sin(x*0.02 + this.time * factor) * Math.sin(x*0.05) * 30);
+            this.ctx.lineTo(x, y);
+        }
+        this.ctx.lineTo(this.width, this.height);
+        this.ctx.fillStyle = this.theme.fg + '22';
+        this.ctx.fill();
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.stroke();
+    }
+}
+
+// 13. Pie Segment
+class VizPie extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        const r = Math.min(this.width, this.height) * 0.3;
+        let start = 0;
+        const factor = this.speed * 400; 
+        const rotationOffset = Math.sin(this.time * factor) * 0.2; 
+        [0.2, 0.3, 0.1, 0.4].forEach((val, i) => {
+            const slice = val * (Math.PI * 2);
+            const end = start + slice;
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(cx, cy);
+            this.ctx.arc(cx, cy, r, start + rotationOffset, end + rotationOffset);
+            this.ctx.fillStyle = i % 2 === 0 ? this.theme.fg : this.theme.fg + '55';
+            if(i===3) this.ctx.fillStyle = this.theme.accent;
+            this.ctx.fill();
+            start = end;
+        });
+    }
+}
+
+// 14. DNA / Helix
+class VizDNA extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const factor = this.speed * 1600;
+        for(let y=10; y<this.height-10; y+=10) {
+            const offset = Math.sin(y*0.05 + this.time * factor) * (this.width * 0.25);
+            
+            this.ctx.beginPath();
+            this.ctx.arc(cx + offset, y, 3, 0, Math.PI*2);
+            this.ctx.fillStyle = this.theme.fg;
+            this.ctx.fill();
+            
+            this.ctx.beginPath();
+            this.ctx.arc(cx - offset, y, 3, 0, Math.PI*2);
+            this.ctx.fillStyle = this.theme.accent;
+            this.ctx.fill();
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(cx+offset, y);
+            this.ctx.lineTo(cx-offset, y);
+            this.ctx.strokeStyle = this.theme.fg + '33';
+            this.ctx.stroke();
+        }
+    }
+}
+
+// 15. Progress Bars
+class VizProgress extends VizModule {
+    draw() {
+        this.clear();
+        const labels = ["CPU", "RAM", "GPU", "SSD"];
+        const factor = this.speed * 600;
+        labels.forEach((l, i) => {
+            const y = 20 + i * 20;
+            const w = this.width - 50;
+            const val = (Math.sin(this.time * factor + i) + 1) / 2;
+            
+            this.ctx.fillStyle = this.theme.fg;
+            this.ctx.font = "10px JetBrains Mono";
+            this.ctx.fillText(l, 5, y);
+            
+            this.ctx.fillStyle = this.theme.fg + '22';
+            this.ctx.fillRect(40, y-6, w, 6);
+            
+            this.ctx.fillStyle = this.theme.accent;
+            this.ctx.fillRect(40, y-6, w*val, 6);
+        });
+    }
+}
+
+// 16. Audio Spectrum
+class VizSpectrum extends VizModule {
+    draw() {
+        this.clear();
+        const bars = 16;
+        const w = this.width / bars;
+        const factor = this.speed * 2000;
+
+        for(let i=0; i<bars; i++) {
+            const h = Math.abs(Math.sin(i * 0.5 + this.time * factor)) * this.height * 0.8;
+            this.ctx.fillStyle = this.theme.fg;
+            this.ctx.fillRect(i*w + 1, this.height - h, w-2, h);
+            
+            this.ctx.fillStyle = this.theme.accent;
+            this.ctx.fillRect(i*w + 1, this.height - h - 4, w-2, 2);
+        }
+    }
+}
+
+// 17. Globe Map
+class VizMap extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        const r = Math.min(this.width, this.height)*0.35;
+        
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, r, 0, Math.PI*2);
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.stroke();
+        
+        const factor = this.speed * 1600;
+        for(let i=0; i<6; i++) {
+            this.ctx.beginPath();
+            const offset = (this.time * factor + i * 60) % 360; 
+            const xRadius = Math.abs(r * Math.sin(offset * Math.PI/180));
+            this.ctx.ellipse(cx, cy, xRadius, r, 0, 0, Math.PI*2);
+            this.ctx.strokeStyle = this.theme.fg + '44';
+            this.ctx.stroke();
+        }
+    }
+}
+
+// 18. Terminal Log
+class VizTerminal extends VizModule {
+    constructor(c, ctx, w, h, t, l, initialSpeed) {
+        super(c,ctx,w,h,t,l,initialSpeed);
+        this.lines = ["INIT SYSTEM...", "CHECKING BIOS...", "KERNEL LOAD OK", "MOUNTING DRIVE", "NETWORKING UP"];
+        this.lastAdd = 0;
+    }
+    draw() {
+        this.clear();
+        this.ctx.font = "9px JetBrains Mono";
+        this.ctx.fillStyle = this.theme.fg;
+        
+        const logSpeed = 1000 / (this.speed * 200); 
+        if(Date.now() - this.lastAdd > logSpeed) {
+            const verbs = ["PARSING", "LOADING", "COMPILING", "PINGING", "SYNCING"];
+            const nouns = ["DATA", "PACKET", "KERNEL", "BUFFER", "THREAD"];
+            this.lines.push(`> ${rndArr(verbs)} ${rndArr(nouns)}... OK`);
+            if(this.lines.length > 10) this.lines.shift();
+            this.lastAdd = Date.now();
+        }
+        this.lines.forEach((line, i) => {
+            this.ctx.fillText(line, 10, 20 + i * 12);
+        });
+    }
+}
+
+// 19. Vector Field
+class VizVectors extends VizModule {
+    draw() {
+        this.clear();
+        const step = 20;
+        const factor = this.speed * 1000;
+        for(let x=step/2; x<this.width; x+=step) {
+            for(let y=step/2; y<this.height; y+=step) {
+                const angle = Math.sin(x*0.01 + this.time * factor) + Math.cos(y*0.01);
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(angle);
+                this.ctx.strokeStyle = this.theme.fg + '66';
+                this.ctx.beginPath();
+                this.ctx.moveTo(-5, 0);
+                this.ctx.lineTo(5, 0);
+                this.ctx.stroke();
+                this.ctx.restore();
+            }
+        }
+    }
+}
+
+// 20. Circular Buffer
+class VizBuffer extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        const r = 20;
+        
+        const factor = this.speed * 1600;
+        for(let i=0; i<8; i++) {
+            const angle = (i/8) * Math.PI*2 + this.time * factor;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+            
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, 3, 0, Math.PI*2);
+            this.ctx.fillStyle = (i === 0) ? this.theme.accent : this.theme.fg;
+            this.ctx.fill();
+        }
+    }
+}
+
+// 21. Waterfall
+class VizWaterfall extends VizModule {
+    constructor(c, ctx, w, h, t, l, initialSpeed) {
+        super(c,ctx,w,h,t,l,initialSpeed);
+        this.history = [];
+        this.lastAdd = 0;
+        this.baseFallSpeed = 200;
+    }
+    draw() {
+        this.clear();
+        const fallSpeed = this.baseFallSpeed / (this.speed * 200); 
+        if(Date.now() - this.lastAdd > fallSpeed) {
+            const row = [];
+            const randRate = 0.95 - (this.speed * 5);
+            for(let i=0; i<this.width/5; i++) {
+                row.push(Math.random() > randRate); 
+            }
+            this.history.unshift(row);
+            if(this.history.length > this.height/5) this.history.pop();
+            this.lastAdd = Date.now();
+        }
+        this.history.forEach((r, y) => {
+            r.forEach((active, x) => {
+                if(active) {
+                    this.ctx.fillStyle = this.theme.fg + '33';
+                    this.ctx.fillRect(x*5, y*5, 4, 4);
+                }
+            });
+        });
+    }
+}
+
+// 22. Network Graph
+class VizNetwork extends VizModule {
+    draw() {
+        this.clear();
+        const nodes = 6;
+        const cx = this.width/2;
+        const cy = this.height/2;
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 4, 0, Math.PI*2);
+        this.ctx.fillStyle = this.theme.accent;
+        this.ctx.fill();
+        
+        const factor = this.speed * 600;
+        for(let i=0; i<nodes; i++) {
+            const angle = (i/nodes) * Math.PI*2 + Math.sin(this.time * factor)*0.5;
+            const dist = 40 + Math.sin(this.time * factor * 0.5 + i)*10;
+            const x = cx + Math.cos(angle) * dist;
+            const y = cy + Math.sin(angle) * dist;
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(cx, cy);
+            this.ctx.lineTo(x, y);
+            this.ctx.strokeStyle = this.theme.fg;
+            this.ctx.stroke();
+            
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, 3, 0, Math.PI*2);
+            this.ctx.fillStyle = this.theme.fg;
+            this.ctx.fill();
+        }
+    }
+}
+
+// 23. Barcode
+class VizBarcode extends VizModule {
+    draw() {
+        this.clear();
+        const xStart = 10;
+        const w = this.width - 20;
+        let cx = xStart;
+        while(cx < w + xStart) {
+            const bw = Math.random() * 5 + 1;
+            this.ctx.fillStyle = Math.random() > 0.5 ? this.theme.fg : 'transparent';
+            this.ctx.fillRect(cx, this.height/2 - 15, bw, 30);
+            cx += bw + 1;
+        }
+        const factor = this.speed * 1000;
+        this.ctx.fillStyle = this.theme.accent;
+        this.ctx.fillRect(xStart + (this.time * factor) % w, this.height/2 - 17, 2, 34);
+    }
+}
+
+// 24. Compass
+class VizCompass extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        const r = Math.min(this.width, this.height) * 0.3;
+        
+        this.ctx.save();
+        this.ctx.translate(cx, cy);
+        const factor = this.speed * 400;
+        this.ctx.rotate(Math.sin(this.time * factor) * 2);
+        
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, r, 0, Math.PI*2);
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.stroke();
+        
+        for(let i=0; i<8; i++) {
+            const a = (i/8)*Math.PI*2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(Math.cos(a)*(r-5), Math.sin(a)*(r-5));
+            this.ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+            this.ctx.stroke();
+        }
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, -r + 10);
+            this.ctx.lineTo(-5, 0);
+        this.ctx.lineTo(5, 0);
+        this.ctx.fillStyle = this.theme.accent;
+        this.ctx.fill();
+        this.ctx.restore();
+        
+        this.ctx.textAlign = "center";
+        this.ctx.fillStyle = this.theme.fg;
+        this.ctx.fillText("HEADING", cx, cy + r + 15);
+    }
+}
+
+// 25. Liquid Fill
+class VizLiquid extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        const r = Math.min(this.width, this.height) * 0.3;
+        const factor = this.speed * 400;
+        const waveFactor = this.speed * 2400;
+        const lvl = Math.sin(this.time * factor) * r * 0.8;
+        
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, r, 0, Math.PI*2);
+        this.ctx.clip();
+        
+        this.ctx.fillStyle = this.theme.fg + '22';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+        
+        this.ctx.fillStyle = this.theme.accent;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, cy - lvl);
+        for(let x=0; x<this.width; x+=10) {
+            this.ctx.lineTo(x, cy - lvl + Math.sin(x*0.05 + this.time * waveFactor)*5);
+        }
+        this.ctx.lineTo(this.width, this.height);
+        this.ctx.lineTo(0, this.height);
+        this.ctx.fill();
+        this.ctx.restore();
+        
+        this.ctx.strokeStyle = this.theme.fg;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, r, 0, Math.PI*2);
+        this.ctx.stroke();
+    }
+}
+
+// --- NEW VIZ TYPES ---
+
+// 26. Seismic Activity (Mirrored jitter)
+class VizSeismic extends VizModule {
+    draw() {
+        this.clear();
+        this.ctx.beginPath();
+        const midY = this.height/2;
+        const factor = this.speed * 5000;
+        
+        for(let x=0; x<this.width; x+=3) {
+            const noise = Math.sin(x * 0.1 + this.time * factor) * Math.random() * this.height * 0.4;
+            this.ctx.moveTo(x, midY - noise);
+            this.ctx.lineTo(x, midY + noise);
+        }
+        this.ctx.strokeStyle = this.theme.accent;
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+    }
+}
+
+// 27. Orbit (Satellite)
+class VizOrbit extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        const factor = this.speed * 800;
+        
+        // Sun
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 10, 0, Math.PI*2);
+        this.ctx.fillStyle = this.theme.fg;
+        this.ctx.fill();
+        
+        // Orbit Path
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 40, 0, Math.PI*2);
+        this.ctx.strokeStyle = this.theme.fg + '33';
+        this.ctx.stroke();
+        
+        // Planet
+        const px = cx + Math.cos(this.time * factor) * 40;
+        const py = cy + Math.sin(this.time * factor) * 40;
+        this.ctx.beginPath();
+        this.ctx.arc(px, py, 6, 0, Math.PI*2);
+        this.ctx.fillStyle = this.theme.accent;
+        this.ctx.fill();
+    }
+}
+
+// 28. Fan (Rotating blades)
+class VizFan extends VizModule {
+    draw() {
+        this.clear();
+        const cx = this.width/2;
+        const cy = this.height/2;
+        const r = Math.min(this.width, this.height) * 0.3;
+        const factor = this.speed * 3000;
+        
+        this.ctx.save();
+        this.ctx.translate(cx, cy);
+        this.ctx.rotate(this.time * factor);
+        
+        this.ctx.fillStyle = this.theme.fg + '66';
+        for(let i=0; i<3; i++) {
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, r, 0, Math.PI/3);
+            this.ctx.lineTo(0,0);
+            this.ctx.fill();
+            this.ctx.rotate((Math.PI*2)/3);
+        }
+        this.ctx.restore();
+        
+        // Center hub
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 5, 0, Math.PI*2);
+        this.ctx.fillStyle = this.theme.accent;
+        this.ctx.fill();
+    }
+}
+
+// 29. Crosshairs
+class VizCross extends VizModule {
+    draw() {
+        this.clear();
+        this.drawGrid(3, 3);
+        const factor = this.speed * 500;
+        
+        const x = (Math.sin(this.time * factor) * 0.4 + 0.5) * this.width;
+        const y = (Math.cos(this.time * factor * 0.7) * 0.4 + 0.5) * this.height;
+        
+        this.ctx.strokeStyle = this.theme.accent;
+        this.ctx.lineWidth = 1;
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height);
+        this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y);
+        this.ctx.stroke();
+        
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, 10, 0, Math.PI*2);
+        this.ctx.stroke();
+    }
+}
+
+// 30. Scanner
+class VizScanner extends VizModule {
+    draw() {
+        this.clear();
+        // Grid
+        const cols = 10;
+        const cw = this.width / cols;
+        this.ctx.fillStyle = this.theme.fg + '22';
+        for(let i=0; i<cols; i++) {
+            if(i%2===0) this.ctx.fillRect(i*cw, 0, cw, this.height);
+        }
+        
+        const factor = this.speed * 2000;
+        const y = (Math.sin(this.time * factor) * 0.5 + 0.5) * this.height;
+        
+        this.ctx.strokeStyle = this.theme.accent;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, y);
+        this.ctx.lineTo(this.width, y);
+        this.ctx.stroke();
+    }
+}
+
+
+// Map of viz classes
+const VIZ_TYPES = [
+    VizSine, VizBars, VizGauge, VizRadar, VizLine, 
+    VizMatrix, VizCube, VizBinary, VizTarget, VizHexDump,
+    VizScatter, VizHorizon, VizPie, VizDNA, VizProgress,
+    VizSpectrum, VizMap, VizTerminal, VizVectors, VizBuffer,
+    VizWaterfall, VizNetwork, VizBarcode, VizCompass, VizLiquid,
+    VizSeismic, VizOrbit, VizFan, VizCross, VizScanner
+];
+
+
+// --- SYSTEM MANAGER ---
+class System {
+    constructor() {
+        this.grid = document.getElementById('viz-grid');
+        this.modules = [];
+        this.themeIndex = 0;
+        this.contextIndex = 0;
+        this.speedIndex = 0; // Start at SLOW
+        this.mode = 'MANUAL';
+        this.autoTimer = null;
+        
+        this.currentTheme = THEMES[this.themeIndex];
+        this.currentContext = CONTEXTS[this.contextIndex];
+        
+        this.speedLabelDom = document.getElementById('speed-label');
+        this.modeLabelDom = document.getElementById('mode-label');
+        this.running = true;
+        
+        window.addEventListener('resize', () => this.handleResize());
+        this.loop();
+        this.shuffleViz();
+        
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    openModal() {
+        document.getElementById('about-modal').classList.add('active');
+    }
+
+    closeModal(event) {
+        // Close only if clicking outside content or on close button
+        if (event.target.id === 'about-modal' || event.target.classList.contains('close-modal')) {
+            document.getElementById('about-modal').classList.remove('active');
+        }
+    }
+
+    setSpeed(index) {
+        this.speedIndex = index;
+        const speedLevel = SPEED_LEVELS[this.speedIndex];
+        this.speedLabelDom.innerText = speedLevel.label;
+        
+        this.modules.forEach(mod => {
+            mod.setSpeed(speedLevel.value);
+            // Keep color consistent unless theme changed
+        });
+        this.speedLabelDom.style.color = speedLevel.label === 'FAST' ? THEMES[this.themeIndex].accent : '#ccc';
+    }
+    
+    cycleSpeed() {
+        this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
+        this.setSpeed(this.speedIndex);
+    }
+
+    setTheme(theme) {
+        this.currentTheme = theme;
+        document.documentElement.style.setProperty('--bg-color', theme.bg);
+        document.documentElement.style.setProperty('--fg-color', theme.fg);
+        document.documentElement.style.setProperty('--accent-color', theme.accent);
+        document.documentElement.style.setProperty('--grid-color', theme.grid);
+        
+        this.modules.forEach(mod => {
+            mod.theme = theme;
+            mod.color = Math.random() > 0.8 ? theme.accent : theme.fg; 
+            if (mod.canvas.parentElement) {
+                mod.canvas.parentElement.style.borderColor = theme.grid;
+                mod.canvas.parentElement.style.background = theme.bg;
+            }
+            if (mod.domMeta) {
+                mod.domMeta.style.color = theme.fg;
+            }
+        });
+        this.handleResize();
+    }
+
+    cycleTheme() {
+        this.themeIndex = (this.themeIndex + 1) % THEMES.length;
+        this.setTheme(THEMES[this.themeIndex]);
+    }
+    
+    cycleContext() {
+        this.contextIndex = (this.contextIndex + 1) % CONTEXTS.length;
+        this.currentContext = CONTEXTS[this.contextIndex];
+        this.shuffleViz();
+    }
+
+    toggleMode() {
+        if (this.mode === 'MANUAL') {
+            this.mode = 'AUTO';
+            this.modeLabelDom.innerText = 'AUTO';
+            // Label color stays default #ccc
+            this.startAutoMode();
+        } else {
+            this.mode = 'MANUAL';
+            this.modeLabelDom.innerText = 'MANUAL';
+            this.stopAutoMode();
+        }
+    }
+
+    startAutoMode() {
+        this.stopAutoMode();
+        // Start the recursive timeout loop for random updates
+        const nextUpdate = () => {
+            if (this.mode !== 'AUTO') return;
+            this.replaceRandomModule();
+            // Schedule next update at random interval
+            const delay = rndInt(100, 800);
+            this.autoTimer = setTimeout(nextUpdate, delay);
+        };
+        nextUpdate();
+    }
+
+    stopAutoMode() {
+        if (this.autoTimer) {
+            clearTimeout(this.autoTimer);
+            this.autoTimer = null;
+        }
+    }
+
+    // New method to replace a single module in place
+    replaceRandomModule() {
+        if (this.modules.length === 0) return;
+
+        const idx = rndInt(0, this.modules.length - 1);
+        const oldModule = this.modules[idx];
+        const container = oldModule.canvas.parentElement;
+
+        // Pick new random viz type and random theme
+        const NewVizClass = rndArr(VIZ_TYPES);
+        const newTheme = rndArr(THEMES);
+        const label = rndArr(this.currentContext.labels) + " " + rndInt(1, 99);
+        const currentSpeed = SPEED_LEVELS[this.speedIndex].value;
+
+        // Create new module
+        const newModule = new NewVizClass(oldModule.canvas, oldModule.ctx, oldModule.width, oldModule.height, newTheme, label, currentSpeed);
+        
+        // Transfer metadata DOM reference
+        newModule.domMeta = oldModule.domMeta;
+        
+        // Update DOM styles for this specific container
+        newModule.domMeta.innerText = label;
+        newModule.domMeta.style.color = newTheme.fg;
+        container.style.borderColor = newTheme.grid;
+        container.style.background = newTheme.bg;
+
+        // Replace in array
+        this.modules[idx] = newModule;
+    }
+
+    shuffleViz() {
+        // If manual shuffle is requested in auto mode, it still works
+        // But auto mode will continue updating individual cells after this
+        this.grid.style.opacity = 0;
+
+        setTimeout(() => {
+            this.grid.innerHTML = '';
+            this.modules = [];
+
+            let availableViz = [...VIZ_TYPES].sort(() => Math.random() - 0.5);
+            
+            const minCellSize = 100;
+            const viewportArea = window.innerWidth * window.innerHeight;
+            const targetCellCount = Math.ceil(viewportArea / (minCellSize * minCellSize)) + 5; 
+            const actualCellCount = Math.max(20, Math.min(targetCellCount, 200)); 
+
+            for(let i=0; i<actualCellCount; i++) {
+                const VizClass = availableViz[i % availableViz.length];
+                this.createCell(VizClass);
+            }
+            
+            this.handleResize();
+            this.setSpeed(this.speedIndex);
+            this.grid.style.opacity = 1;
+        }, 300);
+    }
+
+    createCell(VizClass) {
+        const container = document.createElement('div');
+        container.className = 'viz-container';
+        
+        const spanCol = Math.random() < 0.25 ? 2 : 1;
+        const spanRow = Math.random() < 0.25 ? 2 : 1; 
+        container.style.gridColumn = `span ${spanCol}`;
+        container.style.gridRow = `span ${spanRow}`;
+        
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+        
+        const label = rndArr(this.currentContext.labels) + " " + rndInt(1, 99);
+
+        const meta = document.createElement('div');
+        meta.className = 'viz-meta';
+        meta.innerText = label;
+        meta.style.color = this.currentTheme.fg;
+        container.appendChild(meta);
+
+        this.grid.appendChild(container);
+
+        const initialSpeed = SPEED_LEVELS[this.speedIndex].value;
+        const module = new VizClass(canvas, canvas.getContext('2d'), 0, 0, this.currentTheme, label, initialSpeed);
+        module.domMeta = meta;
+
+        this.modules.push(module);
+    }
+
+    handleResize() {
+        if (this.modules.length === 0) return;
+        this.modules.forEach(mod => {
+            const container = mod.canvas.parentElement;
+            if (container) {
+                const rect = container.getBoundingClientRect();
+                mod.canvas.width = rect.width;
+                mod.canvas.height = rect.height;
+                mod.resize(rect.width, rect.height);
+            }
+        });
+    }
+
+    loop() {
+        if(!this.running) return;
+        this.modules.forEach(mod => {
+            mod.update();
+            mod.draw();
+        });
+        requestAnimationFrame(() => this.loop());
+    }
+}
+
+const system = new System();
+system.setSpeed(0); // Ensure SLOW start
+
+</script>
+</body>
+</html>
